@@ -1,0 +1,37 @@
+{
+  "configurations" : [
+    {
+      "id" : "1B7F71E9-DD4A-4C09-BB20-585FEF25AE5C",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:GeoDBExplorer.xcodeproj",
+      "identifier" : "FF5CC1242E68759600356A72",
+      "name" : "GeoDBExplorer"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:GeoDBExplorer.xcodeproj",
+        "identifier" : "FF5CC1312E68759900356A72",
+        "name" : "GeoDBExplorerTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:GeoDBExplorer.xcodeproj",
+        "identifier" : "FF5CC13B2E68759900356A72",
+        "name" : "GeoDBExplorerUITests"
+      }
+    }
+  ],
+  "version" : 1
+}
