@@ -7,18 +7,8 @@
 
 import Foundation
 
-actor RateGate {
-    private var nextAllowedAt: UInt64 = 0
-    private let intervalNs: UInt64
-    init(milliseconds: Int) { self.intervalNs = UInt64(milliseconds) * 1_000_000 }
-    func acquire() async {
-        let now = DispatchTime.now().uptimeNanoseconds
-        if now < nextAllowedAt { try? await Task.sleep(nanoseconds: nextAllowedAt - now) }
-        let start = max(now, nextAllowedAt)
-        nextAllowedAt = start + intervalNs
-    }
-}
-let sharedRateGate = RateGate(milliseconds: 400)
+// CityListViewModel.swift
+import Foundation
 
 @MainActor
 final class CityListViewModel: ObservableObject {
@@ -26,26 +16,25 @@ final class CityListViewModel: ObservableObject {
     private let service: GeoDBServicing
     private let pageSize: Int
 
+    // throttle + cancel just like CountryListViewModel
+    private let throttler = Throttler(interval: 2.0)
+    private var currentTask: Task<Void, Never>?
+
     @Published private(set) var page = 0
     @Published var cities: [City] = []
     @Published var totalCount = 0
     @Published var isLoading = false
     @Published var message = "Requesting…"
 
-    @Published private var isRateLocked = false
-
-    var canGoPrev: Bool {
-        let p = requestedPage ?? page
-        return p > 0 && !isLoading && !isRateLocked
+    // keep this in the VM per your feedback
+    func isValidCoordinate(lat: Double?, lon: Double?) -> Bool {
+        guard let lat = lat, let lon = lon,
+              lat.isFinite, lon.isFinite,
+              (-90.0...90.0).contains(lat),
+              (-180.0...180.0).contains(lon)
+        else { return false }
+        return true
     }
-    var canGoNext: Bool {
-        let p = requestedPage ?? page
-        return (p + 1) * pageSize < totalCount && !isLoading && !isRateLocked
-    }
-
-    private var currentTask: Task<Void, Never>?
-    private var loadVersion = 0
-    private var requestedPage: Int?
 
     init(country: Country, service: GeoDBServicing, pageSize: Int = 7) {
         self.country = country
@@ -55,77 +44,68 @@ final class CityListViewModel: ObservableObject {
 
     deinit { currentTask?.cancel() }
 
+    var canGoPrev: Bool { page > 0 && !isLoading }
+    var canGoNext: Bool { (page + 1) * pageSize < totalCount && !isLoading }
 
-    func initialLoad() {
-        load(for: 0, keepCooldown: false)
+    // PUBLIC entry — schedule a throttled load of the current page
+    func loadCities() {
+        throttler.schedule { [weak self] in
+            Task { await self?.performLoad() }
+        }
     }
+
+    // call this on first appear
+    func initialLoad() { loadCities() }
 
     func nextPage() {
         guard canGoNext else { return }
-        let target = (requestedPage ?? page) + 1
-        load(for: target, keepCooldown: true)
+        isLoading = true        // lock quickly in UI
+        page += 1
+        loadCities()
     }
 
     func prevPage() {
         guard canGoPrev else { return }
-        let target = (requestedPage ?? page) - 1
-        load(for: target, keepCooldown: true)
+        isLoading = true
+        page -= 1
+        loadCities()
     }
 
+    private func langCode() -> String {
+        UserDefaults.standard.string(forKey: "app.language") ?? "en"
+    }
 
-    private func load(for targetPage: Int, keepCooldown: Bool) {
-        let previous = currentTask
-        previous?.cancel()
-
-        loadVersion &+= 1
-        let myVersion = loadVersion
-
-        isLoading = true
-        if keepCooldown { isRateLocked = true }
-        requestedPage = targetPage
-        message = "Loading…"
+    private func performLoad() async {
+        // cancel any in-flight request
+        currentTask?.cancel()
 
         currentTask = Task { [weak self] in
-            await previous?.value
             guard let self else { return }
-
-            defer {
-                if self.loadVersion == myVersion {
-                    self.isLoading = false
-                    if keepCooldown {
-                        Task { [weak self] in
-                            try? await Task.sleep(nanoseconds: 600_000_000)
-                            self?.isRateLocked = false
-                        }
-                    }
-                    self.requestedPage = nil
-                }
-            }
+            self.isLoading = true
+            self.message   = "Loading…"
+            defer { self.isLoading = false }
 
             do {
-                try Task.checkCancellation()
-
-                await sharedRateGate.acquire()
-
                 let resp = try await self.service.cities(
                     countryCode: self.country.code,
                     limit: self.pageSize,
-                    offset: targetPage * self.pageSize,
-                    language: "en"
+                    offset: self.page * self.pageSize,
+                    language: self.langCode()
                 )
 
-                try Task.checkCancellation()
-                guard self.loadVersion == myVersion else { return }
+                if Task.isCancelled { return } // ignore stale result
 
-                self.page       = targetPage
                 self.cities     = resp.data
                 self.totalCount = resp.metadata.totalCount
                 self.message    = "Loaded \(self.cities.count) of \(self.totalCount)"
-            } catch is CancellationError {
             } catch {
-                guard self.loadVersion == myVersion else { return }
-                self.message = "Couldn’t load cities. Try again."
+                if error is CancellationError { return } // silence cancel
+                self.cities     = []
+                self.totalCount = 0
+                self.message    = "Request error: \(error.localizedDescription)"
             }
         }
+
+        await currentTask?.value
     }
 }

@@ -7,11 +7,43 @@
 
 import Foundation
 
+final class Throttler {
+    private let interval: TimeInterval
+    private var lastFire: Date = .distantPast
+    private var workItem: DispatchWorkItem?
+    private let queue = DispatchQueue.main
+
+    init(interval: TimeInterval) { self.interval = interval }
+
+    func schedule(_ block: @escaping () -> Void) {
+        // Keep only the most recent request
+        workItem?.cancel()
+
+        let now = Date()
+        let delay = max(0, interval - now.timeIntervalSince(lastFire))
+
+        let item = DispatchWorkItem { [weak self] in
+            self?.lastFire = Date()
+            block()
+        }
+        workItem = item
+        queue.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    func cancel() { workItem?.cancel() }
+}
+
+import Foundation
+
 @MainActor
 final class CountryListViewModel: ObservableObject {
 
     private let service: GeoDBServicing
     private let pageSize: Int
+
+    // NEW: throttle to one call per second (tune as needed)
+    private let throttler = Throttler(interval: 2.0)
+    private var currentTask: Task<Void, Never>?
 
     @Published var countries: [Country] = []
     @Published var totalCount: Int = 0
@@ -26,28 +58,25 @@ final class CountryListViewModel: ObservableObject {
 
     var canGoPrev: Bool { page > 0 && !isLoading }
     var canGoNext: Bool { (page + 1) * pageSize < totalCount && !isLoading }
-    
-    private var currentTask: Task<Void, Never>?
-    private var debounceTask: Task<Void, Never>?
-    
+
+    /// Public entry — schedule a (throttled) load of the current page.
     func loadCountries() {
-        debounceTask?.cancel()
-        debounceTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 800_000_000)
-            await self?.performLoadCountries()
+        throttler.schedule { [weak self] in
+            Task { await self?.performLoad() }
         }
     }
 
-    private func performLoadCountries() async {
+    private func performLoad() async {
+        // cancel any in-flight request
         currentTask?.cancel()
-
-        let lang = "en"
 
         currentTask = Task { [weak self] in
             guard let self else { return }
-            self.message = "Loading…"
             self.isLoading = true
+            self.message   = "Loading…"
             defer { self.isLoading = false }
+
+            let lang = UserDefaults.standard.string(forKey: "app.language") ?? "en"
 
             do {
                 let resp = try await self.service.countries(
@@ -55,30 +84,37 @@ final class CountryListViewModel: ObservableObject {
                     offset: self.page * self.pageSize,
                     language: lang
                 )
-                if Task.isCancelled { return }
+
+                if Task.isCancelled { return } // ignore stale result
+
                 self.countries  = resp.data
                 self.totalCount = resp.metadata.totalCount
                 self.message    = "Loaded \(self.countries.count) of \(self.totalCount)"
             } catch {
-                if Task.isCancelled { return }
-                self.countries = []
+                // ignore cancellations; show real errors
+                if error is CancellationError { return }
+                self.countries  = []
                 self.totalCount = 0
-                self.message = "Request error: \(error.localizedDescription)"
+                self.message    = "Loading..."
             }
         }
 
+        // wait so a caller can know when the scheduled work finished (optional)
         await currentTask?.value
     }
 
+    // Paging — set page and trigger a throttled load
     func nextPage() {
         guard (page + 1) * pageSize < totalCount, !isLoading else { return }
         isLoading = true
         page += 1
+        loadCountries()
     }
 
     func prevPage() {
         guard page > 0, !isLoading else { return }
         isLoading = true
         page -= 1
+        loadCountries()
     }
 }

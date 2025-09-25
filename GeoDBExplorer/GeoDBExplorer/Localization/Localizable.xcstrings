@@ -91,6 +91,7 @@
 
     },
     "Favorite countries" : {
+      "extractionState" : "stale",
       "localizations" : {
         "hy" : {
           "stringUnit" : {

@@ -7,38 +7,32 @@
 import SwiftUI
 
 struct FavoritesView: View {
-    @EnvironmentObject var favCountries: FavoriteCountries
-    @EnvironmentObject var favCities: FavoriteCities
-    
+    @ObservedObject var favCountriesVM: FavoriteCountriesViewModel
+    @ObservedObject var favCitiesVM:    FavoriteCitiesViewModel
+
     var body: some View {
-        VStack {
-            Text("Favorite countries")
-                .font(.headline)
-            
-            List {
-                Section("Countries") {
-                    ForEach(favCountries.favCountries, id: \.self) { city in
-                        Text(city.name)
-                    }
-                    .onDelete { indexSet in
-                        for i in indexSet {
-                            _ = favCountries.remove(favCountries.favCountries[i].code)
-                        }
-                    }
+        List {
+            Section("Countries") {
+                ForEach(favCountriesVM.items, id: \.self) { c in
+                    Text(c.name)
                 }
-                
-                Section("Cities") {
-                    ForEach(favCities.favCities, id: \.self) { city in
-                        Text(city.name)
-                    }
-                    .onDelete { indexSet in
-                        for i in indexSet {
-                            _ = favCities.remove(favCities.favCities[i].id)
-                        }
+                .onDelete { indexSet in
+                    for i in indexSet {
+                        _ = favCountriesVM.remove(code: favCountriesVM.items[i].code)
                     }
                 }
             }
-           
+            Section("Cities") {
+                ForEach(favCitiesVM.items, id: \.self) { city in
+                    Text(city.name)
+                }
+                .onDelete { indexSet in
+                    for i in indexSet {
+                        _ = favCitiesVM.remove(code: favCitiesVM.items[i].id)
+                    }
+                }
+            }
         }
+        .navigationTitle("Favorites")
     }
 }

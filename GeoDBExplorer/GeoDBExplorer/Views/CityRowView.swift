@@ -11,6 +11,7 @@ import MapKit
 
 struct CityRowView: View {
     let city: City
+    let isValidCoordinate: Bool
     
     private var coord: CLLocationCoordinate2D {
         .init(latitude: city.latitude, longitude: city.longitude)
@@ -22,7 +23,7 @@ struct CityRowView: View {
         )
     }
     var body: some View {
-        if isValidCoordinate(lat: city.latitude, lon: city.longitude) {
+        if isValidCoordinate {
             VStack(alignment: .leading, spacing: 4) {
                 Text(city.name).font(.body)
                 HStack(spacing: 8) {
@@ -46,14 +47,5 @@ struct CityRowView: View {
                                    description: Text("This item has bad coordinates."))
                 .frame(height: 180)
         }
-    }
-    
-    func isValidCoordinate(lat: Double?, lon: Double?) -> Bool {
-        guard let lat = lat, let lon = lon,
-              lat.isFinite, lon.isFinite,
-              (-90.0...90.0).contains(lat),
-              (-180.0...180.0).contains(lon)
-        else { return false }
-        return true
     }
 }

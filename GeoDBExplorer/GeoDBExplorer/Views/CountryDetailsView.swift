@@ -8,29 +8,21 @@
 import SwiftUI
 
 struct CountryDetailsView: View {
-    @EnvironmentObject var favCities: FavoriteCities
-
+    @ObservedObject var favCitiesVM: FavoriteCitiesViewModel
     @StateObject private var vm: CityListViewModel
     @AppStorage("app.language") private var lang = "en"
 
-    init(country: Country, service: GeoDBServicing) {
-        _vm = StateObject(
-            wrappedValue: CityListViewModel(country: country, service: service, pageSize: 7)
-        )
+    init(country: Country, service: GeoDBServicing, favCitiesVM: FavoriteCitiesViewModel) {
+        _vm = StateObject(wrappedValue: CityListViewModel(country: country, service: service, pageSize: 7))
+        self.favCitiesVM = favCitiesVM
     }
 
     var body: some View {
         List {
             LabeledContent("Code", value: vm.country.code)
-            if let capital = vm.country.capital, !capital.isEmpty {
-                LabeledContent("Capital", value: capital)
-            }
-            if let region = vm.country.region, !region.isEmpty {
-                LabeledContent("Region", value: region)
-            }
-            if let codes = vm.country.currencyCodes, !codes.isEmpty {
-                LabeledContent("Currencies", value: codes.joined(separator: ", "))
-            }
+            if let capital = vm.country.capital, !capital.isEmpty { LabeledContent("Capital", value: capital) }
+            if let region  = vm.country.region,  !region.isEmpty  { LabeledContent("Region",  value: region) }
+            if let codes   = vm.country.currencyCodes, !codes.isEmpty { LabeledContent("Currencies", value: codes.joined(separator: ", ")) }
 
             Section("Cities") {
                 if vm.isLoading && vm.cities.isEmpty {
@@ -40,7 +32,8 @@ struct CountryDetailsView: View {
                 } else {
                     ForEach(vm.cities) { city in
                         NavigationLink {
-                            CityRowView(city: city)
+                            CityRowView(city: city,
+                                        isValidCoordinate: vm.isValidCoordinate(lat: city.latitude, lon: city.longitude))
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -52,8 +45,8 @@ struct CountryDetailsView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Button { favCities.toggle(city) } label: {
-                                    Image(systemName: favCities.isFavorite(city.id) ? "heart.fill" : "heart")
+                                Button { favCitiesVM.toggle(city) } label: {
+                                    Image(systemName: favCitiesVM.isFavorite(city.id) ? "heart.fill" : "heart")
                                         .imageScale(.large)
                                         .foregroundStyle(.blue)
                                 }
@@ -71,11 +64,8 @@ struct CountryDetailsView: View {
             ToolbarItemGroup(placement: .bottomBar) {
                 Button("Prev") { vm.prevPage() }.disabled(!vm.canGoPrev)
                 Spacer()
-                Text(vm.isLoading
-                     ? "Loading…"
-                     : "Page \(vm.page + 1)  • \(vm.totalCount)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Text(vm.isLoading ? "Loading…" : "Page \(vm.page + 1)  • \(vm.totalCount)")
+                    .font(.footnote).foregroundStyle(.secondary)
                 Spacer()
                 Button("Next") { vm.nextPage() }.disabled(!vm.canGoNext)
             }

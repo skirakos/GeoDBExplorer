@@ -14,41 +14,34 @@ enum AppTab: Hashable { case countries, favorites, profile }
 
 struct ContentView: View {
     private let service = GeoDBServiceLive(apiKey: "f5f94d4850msh98f4b69b5c51ee0p1ee57ejsn78cb557e5f6a")
-    
-    @StateObject private var favs = FavoriteCountries()
-    @StateObject private var favCities = FavoriteCities()
 
-    
+    @StateObject private var favCountriesVM = FavoriteCountriesViewModel(store: FavoriteCountriesStore())
+    @StateObject private var favCitiesVM    = FavoriteCitiesViewModel(store: FavoriteCitiesStore())
+
     var body: some View {
-        TabView() {
+        TabView {
             NavigationStack {
-                VStack {
-                    CountriesView(service: service)
-                }
+                CountriesView(service: service,
+                              favCountriesVM: favCountriesVM,
+                              favCitiesVM: favCitiesVM)
             }
             .tabItem { Label("Countries", systemImage: "globe.europe.africa.fill") }
-            .tag(AppTab.countries)
-            
-            NavigationStack {
-                FavoritesView()
-            }
-            .tabItem { Label("Favorites", systemImage: "heart.fill") }
-            .tag(AppTab.favorites)
 
             NavigationStack {
-                ProfileView()
+                FavoritesView(favCountriesVM: favCountriesVM,
+                              favCitiesVM: favCitiesVM)
             }
-            .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
-            .tag(AppTab.profile)
+            .tabItem { Label("Favorites", systemImage: "heart.fill") }
+
+            NavigationStack { ProfileView() }
+                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
         }
-        .environmentObject(favs)
-        .environmentObject(favCities)
     }
 }
 
 
 
 //https://wft-geo-db.p.rapidapi.com/v1/geo/places/Q65/distance?toPlaceId=Q60
-#Preview {
-    ContentView()
-}
+//#Preview {
+//    ContentView()
+//}

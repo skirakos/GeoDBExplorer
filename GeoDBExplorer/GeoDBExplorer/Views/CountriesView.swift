@@ -7,15 +7,23 @@
 
 import SwiftUI
 
+import SwiftUI
+
 struct CountriesView: View {
     let service: GeoDBServicing
-    @EnvironmentObject var favs: FavoriteCountries
+    @ObservedObject var favCountriesVM: FavoriteCountriesViewModel
+    @ObservedObject var favCitiesVM: FavoriteCitiesViewModel
 
     @StateObject private var vm: CountryListViewModel
+    @AppStorage("app.language") private var lang = "en"
 
-    init(service: GeoDBServicing) {
+    init(service: GeoDBServicing,
+         favCountriesVM: FavoriteCountriesViewModel,
+         favCitiesVM: FavoriteCitiesViewModel) {
         self.service = service
-        _vm = StateObject(wrappedValue: CountryListViewModel(service: service, pageSize: 7))
+        self.favCountriesVM = favCountriesVM
+        self.favCitiesVM = favCitiesVM
+        _vm = StateObject(wrappedValue: CountryListViewModel(service: service, pageSize: 10))
     }
 
     var body: some View {
@@ -28,7 +36,10 @@ struct CountriesView: View {
                 } else {
                     List(vm.countries) { c in
                         NavigationLink {
-                            CountryDetailsView(country: c, service: service)
+                            // ✨ pass favCitiesVM down
+                            CountryDetailsView(country: c,
+                                               service: service,
+                                               favCitiesVM: favCitiesVM)
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 6) {
@@ -36,7 +47,7 @@ struct CountriesView: View {
                                     HStack(spacing: 8) {
                                         Text(c.code)
                                         if let capital = c.capital, !capital.isEmpty { Text("• \(capital)") }
-                                        if let region = c.region, !region.isEmpty { Text("• \(region)") }
+                                        if let region  = c.region,  !region.isEmpty  { Text("• \(region)") }
                                     }
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -44,10 +55,9 @@ struct CountriesView: View {
                                 .padding(.vertical, 6)
 
                                 Spacer()
-                                Button { favs.toggle(c) } label: {
-                                    Image(systemName: favs.isFavorite(c.code) ? "heart.fill" : "heart")
+                                Button { favCountriesVM.toggle(c) } label: {
+                                    Image(systemName: favCountriesVM.isFavorite(c.code) ? "heart.fill" : "heart")
                                         .imageScale(.large)
-                                        .foregroundStyle(.blue)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -66,7 +76,7 @@ struct CountriesView: View {
                     Spacer()
                     Text(vm.isLoading
                          ? "Loading…"
-                         : "Page \(vm.page + 1)  • \(vm.totalCount)")
+                         : "Page \(vm.page + 1)  •  \(vm.countries.count) / \(vm.totalCount)")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -74,10 +84,12 @@ struct CountriesView: View {
                 }
             }
         }
-        .task(id: vm.page) {
+        // ✅ make sure loads actually run
+        .task { vm.loadCountries() }             // initial
+        .task(id: vm.page) { vm.loadCountries() } // page changes
+        .task(id: lang) {                        // language changed
+            vm.page = 0
             vm.loadCountries()
-            try? await Task.sleep(nanoseconds: 1_100_000_000)
         }
     }
 }
-
