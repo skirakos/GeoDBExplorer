@@ -16,7 +16,6 @@ final class Throttler {
     init(interval: TimeInterval) { self.interval = interval }
 
     func schedule(_ block: @escaping () -> Void) {
-        // Keep only the most recent request
         workItem?.cancel()
 
         let now = Date()
@@ -33,15 +32,12 @@ final class Throttler {
     func cancel() { workItem?.cancel() }
 }
 
-import Foundation
-
 @MainActor
 final class CountryListViewModel: ObservableObject {
 
     private let service: GeoDBServicing
     private let pageSize: Int
 
-    // NEW: throttle to one call per second (tune as needed)
     private let throttler = Throttler(interval: 2.0)
     private var currentTask: Task<Void, Never>?
 
@@ -59,7 +55,6 @@ final class CountryListViewModel: ObservableObject {
     var canGoPrev: Bool { page > 0 && !isLoading }
     var canGoNext: Bool { (page + 1) * pageSize < totalCount && !isLoading }
 
-    /// Public entry — schedule a (throttled) load of the current page.
     func loadCountries() {
         throttler.schedule { [weak self] in
             Task { await self?.performLoad() }
@@ -67,7 +62,6 @@ final class CountryListViewModel: ObservableObject {
     }
 
     private func performLoad() async {
-        // cancel any in-flight request
         currentTask?.cancel()
 
         currentTask = Task { [weak self] in
@@ -76,7 +70,7 @@ final class CountryListViewModel: ObservableObject {
             self.message   = "Loading…"
             defer { self.isLoading = false }
 
-            let lang = UserDefaults.standard.string(forKey: "app.language") ?? "en"
+            let lang = "en"
 
             do {
                 let resp = try await self.service.countries(
@@ -91,7 +85,6 @@ final class CountryListViewModel: ObservableObject {
                 self.totalCount = resp.metadata.totalCount
                 self.message    = "Loaded \(self.countries.count) of \(self.totalCount)"
             } catch {
-                // ignore cancellations; show real errors
                 if error is CancellationError { return }
                 self.countries  = []
                 self.totalCount = 0
@@ -99,11 +92,9 @@ final class CountryListViewModel: ObservableObject {
             }
         }
 
-        // wait so a caller can know when the scheduled work finished (optional)
         await currentTask?.value
     }
 
-    // Paging — set page and trigger a throttled load
     func nextPage() {
         guard (page + 1) * pageSize < totalCount, !isLoading else { return }
         isLoading = true

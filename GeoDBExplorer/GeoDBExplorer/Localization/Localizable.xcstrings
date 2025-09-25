@@ -32,7 +32,14 @@
       }
     },
     "Account" : {
-
+      "localizations" : {
+        "hy" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Անձնական էջ"
+          }
+        }
+      }
     },
     "Capital" : {
       "localizations" : {
@@ -45,7 +52,14 @@
       }
     },
     "Choose Photo" : {
-
+      "localizations" : {
+        "hy" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ընտրել նկար"
+          }
+        }
+      }
     },
     "Cities" : {
       "localizations" : {
@@ -135,7 +149,14 @@
       "extractionState" : "manual"
     },
     "Language" : {
-
+      "localizations" : {
+        "hy" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Լեզու"
+          }
+        }
+      }
     },
     "Last name" : {
       "localizations" : {
@@ -187,6 +208,22 @@
         }
       }
     },
+    "Page %lld  •  %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld  •  %2$lld"
+          }
+        },
+        "hy" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Էջ %1$lld  •  %2$lld"
+          }
+        }
+      }
+    },
     "Page %lld  •  %lld / %lld" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -210,6 +247,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Page %1$lld  • %2$lld"
+          }
+        },
+        "hy" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Էջ %1$lld  • %2$lld"
           }
         }
       }
@@ -266,7 +309,14 @@
       }
     },
     "Remove" : {
-
+      "localizations" : {
+        "hy" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Հեռացնել"
+          }
+        }
+      }
     },
     "Remove avatar" : {
       "extractionState" : "stale",

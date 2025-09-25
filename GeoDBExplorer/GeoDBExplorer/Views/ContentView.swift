@@ -13,8 +13,17 @@ import Foundation
 enum AppTab: Hashable { case countries, favorites, profile }
 
 struct ContentView: View {
-    private let service = GeoDBServiceLive(apiKey: "f5f94d4850msh98f4b69b5c51ee0p1ee57ejsn78cb557e5f6a")
+    private let service: GeoDBServicing
 
+    init() {
+        let network = NetworkManager(
+            baseURL: URL(string: "https://wft-geo-db.p.rapidapi.com")!,
+            apiKey: "f5f94d4850msh98f4b69b5c51ee0p1ee57ejsn78cb557e5f6a",
+            hostHeader: "wft-geo-db.p.rapidapi.com",
+            retry: .oneRetry
+        )
+        self.service = GeoDBService(network: network)
+    }
     @StateObject private var favCountriesVM = FavoriteCountriesViewModel(store: FavoriteCountriesStore())
     @StateObject private var favCitiesVM    = FavoriteCitiesViewModel(store: FavoriteCitiesStore())
 
@@ -39,9 +48,6 @@ struct ContentView: View {
     }
 }
 
-
-
-//https://wft-geo-db.p.rapidapi.com/v1/geo/places/Q65/distance?toPlaceId=Q60
 //#Preview {
 //    ContentView()
 //}

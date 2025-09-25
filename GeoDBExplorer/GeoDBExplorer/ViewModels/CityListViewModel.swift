@@ -7,16 +7,12 @@
 
 import Foundation
 
-// CityListViewModel.swift
-import Foundation
-
 @MainActor
 final class CityListViewModel: ObservableObject {
     let country: Country
     private let service: GeoDBServicing
     private let pageSize: Int
 
-    // throttle + cancel just like CountryListViewModel
     private let throttler = Throttler(interval: 2.0)
     private var currentTask: Task<Void, Never>?
 
@@ -26,7 +22,6 @@ final class CityListViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var message = "Requesting…"
 
-    // keep this in the VM per your feedback
     func isValidCoordinate(lat: Double?, lon: Double?) -> Bool {
         guard let lat = lat, let lon = lon,
               lat.isFinite, lon.isFinite,
@@ -47,19 +42,17 @@ final class CityListViewModel: ObservableObject {
     var canGoPrev: Bool { page > 0 && !isLoading }
     var canGoNext: Bool { (page + 1) * pageSize < totalCount && !isLoading }
 
-    // PUBLIC entry — schedule a throttled load of the current page
     func loadCities() {
         throttler.schedule { [weak self] in
             Task { await self?.performLoad() }
         }
     }
 
-    // call this on first appear
     func initialLoad() { loadCities() }
 
     func nextPage() {
         guard canGoNext else { return }
-        isLoading = true        // lock quickly in UI
+        isLoading = true
         page += 1
         loadCities()
     }
@@ -72,11 +65,10 @@ final class CityListViewModel: ObservableObject {
     }
 
     private func langCode() -> String {
-        UserDefaults.standard.string(forKey: "app.language") ?? "en"
+        "en"
     }
 
     private func performLoad() async {
-        // cancel any in-flight request
         currentTask?.cancel()
 
         currentTask = Task { [weak self] in
@@ -93,19 +85,18 @@ final class CityListViewModel: ObservableObject {
                     language: self.langCode()
                 )
 
-                if Task.isCancelled { return } // ignore stale result
+                if Task.isCancelled { return }
 
                 self.cities     = resp.data
                 self.totalCount = resp.metadata.totalCount
                 self.message    = "Loaded \(self.cities.count) of \(self.totalCount)"
             } catch {
-                if error is CancellationError { return } // silence cancel
+                if error is CancellationError { return }
                 self.cities     = []
                 self.totalCount = 0
                 self.message    = "Request error: \(error.localizedDescription)"
             }
         }
-
         await currentTask?.value
     }
 }

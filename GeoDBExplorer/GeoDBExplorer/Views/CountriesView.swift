@@ -16,7 +16,8 @@ struct CountriesView: View {
 
     @StateObject private var vm: CountryListViewModel
     @AppStorage("app.language") private var lang = "en"
-
+    
+    private var reloadKey: String { "\(vm.page)|\(lang)" }
     init(service: GeoDBServicing,
          favCountriesVM: FavoriteCountriesViewModel,
          favCitiesVM: FavoriteCitiesViewModel) {
@@ -36,7 +37,6 @@ struct CountriesView: View {
                 } else {
                     List(vm.countries) { c in
                         NavigationLink {
-                            // ✨ pass favCitiesVM down
                             CountryDetailsView(country: c,
                                                service: service,
                                                favCitiesVM: favCitiesVM)
@@ -58,6 +58,7 @@ struct CountriesView: View {
                                 Button { favCountriesVM.toggle(c) } label: {
                                     Image(systemName: favCountriesVM.isFavorite(c.code) ? "heart.fill" : "heart")
                                         .imageScale(.large)
+                                        .foregroundStyle(.blue)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -69,6 +70,11 @@ struct CountriesView: View {
                     }
                 }
             }
+            .onAppear {
+                if vm.countries.isEmpty && !vm.isLoading {
+                    vm.loadCountries()
+                }
+            }
             .navigationTitle("Countries")
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
@@ -76,7 +82,7 @@ struct CountriesView: View {
                     Spacer()
                     Text(vm.isLoading
                          ? "Loading…"
-                         : "Page \(vm.page + 1)  •  \(vm.countries.count) / \(vm.totalCount)")
+                         : "Page \(vm.page + 1)  •  \(vm.totalCount)")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -84,12 +90,8 @@ struct CountriesView: View {
                 }
             }
         }
-        // ✅ make sure loads actually run
-        .task { vm.loadCountries() }             // initial
-        .task(id: vm.page) { vm.loadCountries() } // page changes
-        .task(id: lang) {                        // language changed
-            vm.page = 0
-            vm.loadCountries()
+        .task(id: reloadKey) {
+                   vm.loadCountries()
+               }
         }
-    }
 }
