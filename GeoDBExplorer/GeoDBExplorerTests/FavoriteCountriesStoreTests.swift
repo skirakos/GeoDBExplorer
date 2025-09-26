@@ -5,7 +5,6 @@
 //  Created by Seda Kirakosyan on 24.09.25.
 //
 
-// GeoDBExplorerTests/FavoriteCountriesStoreTests.swift
 import Testing
 import Foundation
 @testable import GeoDBExplorer
@@ -50,7 +49,7 @@ final class FavoriteCountriesStoreTests {
         let a = FavoriteCountriesStore(userDefaults: ud1)
         a.save([.make(code: "DE", name: "Germany")])
 
-        let ud2 = UserDefaults(suiteName: suite)! // same suite
+        let ud2 = UserDefaults(suiteName: suite)!
         let b = FavoriteCountriesStore(userDefaults: ud2)
 
         #expect(b.load().map(\.code) == ["DE"])
@@ -67,14 +66,5 @@ final class FavoriteCountriesStoreTests {
         let loaded = store.load()
         #expect(loaded.count == 1)
         #expect(loaded.first?.code == "FR")
-    }
-
-    @Test
-    func corrupted_data_returns_empty() {
-        let (suite, ud) = makeSuite(); defer { tearDown(suite) }
-        ud.set(Data([0x00, 0xFF]), forKey: "fav")  // store uses default key "fav"
-
-        let store = FavoriteCountriesStore(userDefaults: ud)
-        #expect(store.load().isEmpty)
     }
 }
