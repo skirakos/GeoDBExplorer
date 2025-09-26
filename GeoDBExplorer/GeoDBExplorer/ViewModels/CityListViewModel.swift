@@ -13,7 +13,7 @@ final class CityListViewModel: ObservableObject {
     private let service: GeoDBServicing
     private let pageSize: Int
 
-    private let throttler: Throttler
+    private let throttler: Debouncer
     private var currentTask: Task<Void, Never>?
 
     @Published private(set) var page = 0
@@ -39,7 +39,7 @@ final class CityListViewModel: ObservableObject {
         self.country = country
         self.service = service
         self.pageSize = min(pageSize, 100)
-        self.throttler = Throttler(interval: throttleInterval)
+        self.throttler = Debouncer(interval: throttleInterval)
     }
 
     deinit { currentTask?.cancel() }

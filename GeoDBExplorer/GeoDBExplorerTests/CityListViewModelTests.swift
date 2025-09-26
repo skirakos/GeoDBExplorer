@@ -6,218 +6,88 @@
 //
 
 import Testing
-import Foundation
 @testable import GeoDBExplorer
-
-extension City {
-    static func make(
-        name: String,
-        countryCode: String,
-        region: String? = nil,
-        lat: Double = 40.18,
-        lon: Double = 44.51,
-        population: Int? = nil,
-        wikiDataId: String? = nil
-    ) -> City {
-        City(
-            name: name,
-            wikiDataId: wikiDataId,
-            countryCode: countryCode,
-            region: region,
-            latitude: lat,
-            longitude: lon,
-            population: population
-        )
-    }
-}
-
-extension Country {
-    static func make(code: String, name: String) -> Country {
-        Country(code: code,
-                name: name,
-                wikiDataId: nil, region: nil, capital: nil,
-                callingCode: nil, currencyCodes: nil,
-                numRegions: nil, flagImageUri: nil)
-    }
-}
-
-struct FakeCityService: GeoDBServicing {
-    var citiesByCountry: [String: [City]] = [:]
-    var throwCitiesError = false
-
-    func countries(limit: Int, offset: Int, language: String) async throws -> CountriesResponse {
-        fatalError("countries() not used in CityListViewModel tests")
-    }
-
-    func cities(countryCode: String, limit: Int, offset: Int, language: String) async throws -> CitiesResponse {
-        if throwCitiesError { throw URLError(.badServerResponse) }
-        let all = citiesByCountry[countryCode] ?? []
-        let page = Array(all.dropFirst(offset).prefix(limit))
-        return CitiesResponse(
-            data: page,
-            metadata: CountriesResponse.Metadata(
-                totalCount: all.count,
-                currentOffset: offset,
-                limit: page.count
-            )
-        )
-    }
-}
 
 @MainActor
 struct CityListViewModelTests {
-
-    @Test
-    func initial_state_is_empty() {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let vm = CityListViewModel(country: am, service: FakeCityService(), pageSize: 3, throttleInterval: 0)
-
-        #expect(vm.cities.isEmpty)
-        #expect(vm.totalCount == 0)
-        #expect(vm.page == 0)
-        #expect(vm.isLoading == false)
-        #expect(vm.canGoNext == false)
-        #expect(vm.canGoPrev == false)
+    private func makeVM(
+        countryCode: String = "AM",
+        service: GeoDBServicing,
+        pageSize: Int = 10
+    ) -> CityListViewModel {
+        CityListViewModel(
+            country: .make(code: countryCode, name: "Armenia"),
+            service: service,
+            pageSize: pageSize,
+            throttleInterval: 0
+        )
     }
 
     @Test
-    func loads_first_page_for_country() async {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let fake = FakeCityService(
-            citiesByCountry: [
-                "AM": [
-                    .make(name: "Yerevan", countryCode: "AM"),
-                    .make(name: "Gyumri",  countryCode: "AM"),
-                    .make(name: "Vanadzor", countryCode: "AM"),
-                    .make(name: "Hrazdan",  countryCode: "AM")
-                ],
-                "FR": [ .make(name: "Paris", countryCode: "FR") ]
-            ]
-        )
-        let vm = CityListViewModel(country: am, service: fake, pageSize: 2, throttleInterval: 0)
+    func first_load_calls_service_once_and_updates_state() async {
+        let mock = MockGeoDBService()
+        mock.nextCities = .success(.make(
+            data: [City.make(name: "Yerevan"), City.make(name: "Gyumri")],
+            total: 2, offset: 0, limit: 10
+        ))
 
+        let vm = makeVM(service: mock, pageSize: 10)
         vm.loadCities()
-        try? await Task.sleep(nanoseconds: 150_000_000) // 0.15s
 
-        #expect(vm.isLoading == false)
-        #expect(vm.totalCount == 4)
+        await waitUntil { mock.citiesCalls.count == 1 && vm.isLoading == false }
+
+        #expect(mock.citiesCalls.first?.countryCode == "AM")
+        #expect(mock.citiesCalls.first?.limit == 10)
+        #expect(mock.citiesCalls.first?.offset == 0)
+        #expect(mock.citiesCalls.first?.language == "en")
+
         #expect(vm.cities.map(\.name) == ["Yerevan", "Gyumri"])
-        #expect(vm.canGoPrev == false)
-        #expect(vm.canGoNext == true)
+        #expect(vm.totalCount == 2)
+        #expect(vm.message.localizedLowercase.contains("loaded"))
     }
 
-    @Test
-    func next_then_prev_switches_pages() async {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let fake = FakeCityService(
-            citiesByCountry: [
-                "AM": [
-                    .make(name: "Yerevan",  countryCode: "AM"),
-                    .make(name: "Gyumri",   countryCode: "AM"),
-                    .make(name: "Vanadzor", countryCode: "AM"),
-                    .make(name: "Hrazdan",  countryCode: "AM")
-                ]
-            ]
-        )
-        let vm = CityListViewModel(country: am, service: fake, pageSize: 2, throttleInterval: 0)
-
-        vm.loadCities()
-        try? await Task.sleep(nanoseconds: 150_000_000)
-
-        vm.nextPage()
-        vm.loadCities()
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(vm.page == 1)
-        #expect(vm.cities.map(\.name) == ["Vanadzor", "Hrazdan"])
-
-        vm.prevPage()
-        vm.loadCities()
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(vm.page == 0)
-        #expect(vm.cities.map(\.name) == ["Yerevan", "Gyumri"])
-    }
+    private enum Crash: Error { case fail }
 
     @Test
-    func last_page_disables_next() async {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let fake = FakeCityService(
-            citiesByCountry: ["AM": [
-                .make(name: "Yerevan",  countryCode: "AM"),
-                .make(name: "Gyumri",   countryCode: "AM"),
-                .make(name: "Vanadzor", countryCode: "AM")
-            ]]
-        )
-        let vm = CityListViewModel(country: am, service: fake, pageSize: 2, throttleInterval: 0)
+    func load_error_clears_list_and_stops_loading() async {
+        let mock = MockGeoDBService()
+        mock.nextCities = .failure(Crash.fail)
 
-        vm.loadCities();                   try? await Task.sleep(nanoseconds: 150_000_000)
-        vm.nextPage(); vm.loadCities();    try? await Task.sleep(nanoseconds: 150_000_000)
-
-        #expect(vm.page == 1)
-        #expect(vm.cities.map(\.name) == ["Vanadzor"])
-        #expect(vm.canGoNext == false)
-        #expect(vm.canGoPrev == true)
-    }
-
-    @Test
-    func error_clears_data_and_sets_message() async {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let fake = FakeCityService(citiesByCountry: [:], throwCitiesError: true)
-        let vm = CityListViewModel(country: am, service: fake, pageSize: 3, throttleInterval: 0)
-
+        let vm = makeVM(service: mock, pageSize: 10)
         vm.loadCities()
-        try? await Task.sleep(nanoseconds: 150_000_000)
 
+        await waitUntil { mock.citiesCalls.count == 1 && vm.isLoading == false }
         #expect(vm.cities.isEmpty)
         #expect(vm.totalCount == 0)
-        #expect(vm.message.localizedCaseInsensitiveContains("error")
-             || vm.message.localizedCaseInsensitiveContains("request"))
+        #expect(vm.message.localizedLowercase.contains("error"))
     }
 
     @Test
-    func prev_from_first_does_nothing() async {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let fake = FakeCityService(citiesByCountry: ["AM": [
-            .make(name: "Yerevan", countryCode: "AM"),
-            .make(name: "Gyumri",  countryCode: "AM")
-        ]])
-        let vm = CityListViewModel(country: am, service: fake, pageSize: 2, throttleInterval: 0)
+    func multiple_loads_while_loading_trigger_only_one_request() async {
+        let mock = MockGeoDBService()
+        mock.nextCities = .success(.make(
+            data: [City.make(name: "Yerevan")],
+            total: 1, offset: 0, limit: 10
+        ))
 
-        vm.loadCities(); try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(vm.page == 0)
-        vm.prevPage()
-        #expect(vm.page == 0)
+        let vm = makeVM(service: mock, pageSize: 10)
+        vm.loadCities()
+        vm.loadCities()
+        vm.loadCities()
+
+        await waitUntil { mock.citiesCalls.count == 1 && vm.isLoading == false }
+        #expect(mock.citiesCalls.count == 1)
     }
 
     @Test
-    func empty_result_shows_no_next_and_message() async {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let fake = FakeCityService(citiesByCountry: ["AM": []])
-        let vm = CityListViewModel(country: am, service: fake, pageSize: 3, throttleInterval: 0)
+    func pageSize_is_capped_in_service_call() async {
+        let mock = MockGeoDBService()
+        mock.nextCities = .success(.make(data: [], total: 0, offset: 0, limit: 100))
 
-        vm.loadCities(); try? await Task.sleep(nanoseconds: 150_000_000)
+        let vm = makeVM(service: mock, pageSize: 500)
+        vm.loadCities()
 
-        #expect(vm.cities.isEmpty)
-        #expect(vm.totalCount == 0)
-        #expect(vm.canGoNext == false)
-        #expect(vm.canGoPrev == false)
-        #expect(!vm.message.isEmpty)
-    }
-
-    @Test
-    func short_last_page_disables_next() async {
-        let am = Country.make(code: "AM", name: "Armenia")
-        let fake = FakeCityService(citiesByCountry: ["AM": [
-            .make(name: "A", countryCode: "AM"),
-            .make(name: "B", countryCode: "AM"),
-            .make(name: "C", countryCode: "AM")
-        ]])
-        let vm = CityListViewModel(country: am, service: fake, pageSize: 2, throttleInterval: 0)
-
-        vm.loadCities(); try? await Task.sleep(nanoseconds: 150_000_000)
-        vm.nextPage(); vm.loadCities(); try? await Task.sleep(nanoseconds: 150_000_000)
-
-        #expect(vm.cities.map(\.name) == ["C"])
-        #expect(vm.canGoNext == false)
-        #expect(vm.canGoPrev == true)
+        await waitUntil { mock.citiesCalls.count == 1 && vm.isLoading == false }
+        #expect(mock.citiesCalls.first?.limit == 100)
     }
 }

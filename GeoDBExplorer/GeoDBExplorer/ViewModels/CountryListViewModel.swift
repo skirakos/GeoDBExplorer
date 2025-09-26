@@ -7,7 +7,7 @@
 
 import Foundation
 
-final class Throttler {
+final class Debouncer {
     private let interval: TimeInterval
     private var lastFire: Date = .distantPast
     private var workItem: DispatchWorkItem?
@@ -38,7 +38,7 @@ final class CountryListViewModel: ObservableObject {
     private let service: GeoDBServicing
     private let pageSize: Int
 
-    private let throttler = Throttler(interval: 2.0)
+    private let debouncer = Debouncer(interval: 2.0)
     private var currentTask: Task<Void, Never>?
 
     @Published var countries: [Country] = []
@@ -49,14 +49,14 @@ final class CountryListViewModel: ObservableObject {
 
     init(service: GeoDBServicing, pageSize: Int = 7) {
         self.service = service
-        self.pageSize = pageSize
+        self.pageSize = min(pageSize, 100)
     }
 
     var canGoPrev: Bool { page > 0 && !isLoading }
     var canGoNext: Bool { (page + 1) * pageSize < totalCount && !isLoading }
 
     func loadCountries() {
-        throttler.schedule { [weak self] in
+        debouncer.schedule { [weak self] in
             Task { await self?.performLoad() }
         }
     }
